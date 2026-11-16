@@ -1,0 +1,48 @@
+### Login
+POST http://localhost:8081/api/auth/login
+Content-Type: application/x-www-form-urlencoded
+
+username=admin&password=admin123
+
+### Current user
+GET http://localhost:8081/api/auth/me
+
+### Create teacher
+POST http://localhost:8081/api/teachers
+Content-Type: application/json
+
+{"name":"Dr. Rahman","email":"rahman@kuet.ac.bd","username":"teacher1","password":"teach123","department":"CSE","designation":"Professor"}
+
+### Create student
+POST http://localhost:8081/api/students
+Content-Type: application/json
+
+{"name":"Prottoy","email":"prottoy@stud.kuet.ac.bd","username":"student1","password":"stud123","roll":"2207040","department":"CSE","batch":2022}
+
+### Create admin
+POST http://localhost:8081/api/admins
+Content-Type: application/json
+
+{"name":"Second Admin","email":"admin2@kuet.ac.bd","username":"admin2","password":"admin456"}
+
+### List students
+GET http://localhost:8081/api/students
+
+### Get student
+GET http://localhost:8081/api/students/1
+
+### Update student
+PUT http://localhost:8081/api/students/1
+Content-Type: application/json
+
+{"name":"Prottoy Kumar Bhoumik","email":"prottoy@stud.kuet.ac.bd","username":"student1","roll":"2207040","department":"CSE","batch":2022}
+
+### Delete teacher
+DELETE http://localhost:8081/api/teachers/1
+
+### Logout
+POST http://localhost:8081/api/auth/logout
+
+### RBAC check: teacher accessing students -> 403
+GET http://localhost:8081/api/students
+Authorization: Basic teacher1 teach123

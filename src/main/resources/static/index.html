@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KUET University Management System</title>
+<style>
+  :root { --bg:#f4f6fb; --card:#fff; --ink:#1d2433; --muted:#6b7385; --line:#e3e7ef;
+          --brand:#1f4fa3; --brand-2:#163b7d; --danger:#c0392b; --ok:#1e8e4e; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: "Segoe UI", system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+  header { background:var(--brand); color:#fff; padding:14px 28px; display:flex; align-items:center; justify-content:space-between; }
+  header h1 { font-size:18px; margin:0; font-weight:600; letter-spacing:.2px; }
+  header .who { font-size:14px; display:flex; gap:12px; align-items:center; }
+  .badge { background:rgba(255,255,255,.18); padding:3px 10px; border-radius:999px; font-size:12px; font-weight:600; }
+  main { max-width:1100px; margin:28px auto; padding:0 20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:22px; }
+  .login { max-width:380px; margin:70px auto; }
+  .login h2 { margin:0 0 4px; } .login p { margin:0 0 18px; color:var(--muted); font-size:14px; }
+  label { display:block; font-size:13px; color:var(--muted); margin:10px 0 4px; }
+  input { width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:8px; font-size:14px; }
+  input:focus { outline:2px solid #b9cdf3; border-color:var(--brand); }
+  button { cursor:pointer; border:0; border-radius:8px; padding:9px 16px; font-size:14px; font-weight:600; }
+  .primary { background:var(--brand); color:#fff; } .primary:hover { background:var(--brand-2); }
+  .ghost { background:transparent; color:#fff; border:1px solid rgba(255,255,255,.5); padding:6px 12px; }
+  .link { background:none; color:var(--brand); padding:4px 8px; }
+  .link.danger { color:var(--danger); }
+  .tabs { display:flex; gap:6px; margin-bottom:16px; }
+  .tab { background:#e6ebf5; color:var(--ink); }
+  .tab.active { background:var(--brand); color:#fff; }
+  .toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+  .toolbar h2 { margin:0; font-size:18px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:10px 8px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.4px; }
+  .empty { color:var(--muted); text-align:center; padding:26px; }
+  .msg { margin-top:12px; font-size:14px; min-height:20px; }
+  .msg.err { color:var(--danger); } .msg.ok { color:var(--ok); }
+  dialog { border:0; border-radius:12px; padding:22px; width:420px; box-shadow:0 20px 60px rgba(0,0,0,.25); }
+  dialog::backdrop { background:rgba(20,30,50,.45); }
+  dialog h3 { margin:0 0 6px; }
+  .row { display:flex; gap:10px; justify-content:flex-end; margin-top:18px; }
+  .hint { font-size:12px; color:var(--muted); }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>KUET University Management System</h1>
+  <div class="who hidden" id="who">
+    <span id="whoName"></span><span class="badge" id="whoRole"></span>
+    <button class="ghost" onclick="logout()">Logout</button>
+  </div>
+</header>
+
+<main>
+  <section class="card login" id="loginView">
+    <h2>Sign in</h2>
+    <p>Sign in with your Admin, Teacher or Student account.</p>
+    <form onsubmit="login(event)">
+      <label for="u">Username</label><input id="u" autocomplete="username" required>
+      <label for="p">Password</label><input id="p" type="password" autocomplete="current-password" required>
+      <div style="margin-top:18px"><button class="primary" style="width:100%">Login</button></div>
+    </form>
+    <div class="msg err" id="loginMsg"></div>
+  </section>
+
+  <section class="hidden" id="appView">
+    <div class="tabs" id="tabs"></div>
+    <div class="card">
+      <div class="toolbar">
+        <h2 id="title"></h2>
+        <button class="primary" onclick="openForm()">+ Add</button>
+      </div>
+      <table><thead id="thead"></thead><tbody id="tbody"></tbody></table>
+      <div class="msg" id="msg"></div>
+    </div>
+  </section>
+</main>
+
+<dialog id="dlg">
+  <form onsubmit="save(event)">
+    <h3 id="dlgTitle"></h3>
+    <div id="fields"></div>
+    <div class="msg err" id="dlgMsg"></div>
+    <div class="row">
+      <button type="button" class="link" onclick="dlg.close()">Cancel</button>
+      <button class="primary">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const RESOURCES = {
+  admins:   { label: 'Admins',   roles: ['ROLE_ADMIN'],
+              fields: [] },
+  teachers: { label: 'Teachers', roles: ['ROLE_ADMIN', 'ROLE_TEACHER'],
+              fields: [['department','Department',true], ['designation','Designation',false]] },
+  students: { label: 'Students', roles: ['ROLE_ADMIN', 'ROLE_STUDENT'],
+              fields: [['roll','Roll',true], ['department','Department',false], ['batch','Batch',false,'number']] },
+};
+const COMMON = [['name','Name',true], ['email','Email',true,'email'], ['username','Username',true]];
+
+let me = null, current = null, editingId = null, rows = [];
+const $ = id => document.getElementById(id);
+const esc = v => String(v ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+async function api(method, url, body) {
+  const res = await fetch(url, {
+    method, credentials: 'same-origin',
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const text = await res.text();
+  let data = null; try { data = text ? JSON.parse(text) : null; } catch {}
+  if (!res.ok) {
+    const fe = data && data.fieldErrors ? ' — ' + Object.entries(data.fieldErrors).map(([k,v]) => `${k}: ${v}`).join(', ') : '';
+    throw new Error(`${res.status} ${(data && data.message) || res.statusText}${fe}`);
+  }
+  return data;
+}
+
+async function login(e) {
+  e.preventDefault();
+  $('loginMsg').textContent = '';
+  const res = await fetch('/api/auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ username: $('u').value, password: $('p').value })
+  });
+  if (!res.ok) { $('loginMsg').textContent = 'Invalid username or password'; return; }
+  $('p').value = '';
+  await boot();
+}
+
+async function logout() {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  me = null;
+  $('appView').classList.add('hidden'); $('who').classList.add('hidden');
+  $('loginView').classList.remove('hidden');
+}
+
+async function boot() {
+  try { me = await api('GET', '/api/auth/me'); } catch { return; }
+  $('loginView').classList.add('hidden');
+  $('appView').classList.remove('hidden'); $('who').classList.remove('hidden');
+  $('whoName').textContent = me.username;
+  $('whoRole').textContent = me.roles[0].replace('ROLE_', '');
+  const allowed = Object.keys(RESOURCES).filter(k => RESOURCES[k].roles.some(r => me.roles.includes(r)));
+  $('tabs').innerHTML = allowed.map(k =>
+    `<button class="tab" data-k="${k}" onclick="show('${k}')">${RESOURCES[k].label}</button>`).join('');
+  show(allowed[0]);
+}
+
+async function show(key) {
+  current = key;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.k === key));
+  $('title').textContent = RESOURCES[key].label;
+  const cols = ['id', ...COMMON.map(f => f[0]), ...RESOURCES[key].fields.map(f => f[0])];
+  $('thead').innerHTML = '<tr>' + cols.map(c => `<th>${c}</th>`).join('') + '<th></th></tr>';
+  setMsg('');
+  try {
+    rows = await api('GET', '/api/' + key);
+    $('tbody').innerHTML = rows.length ? rows.map(r =>
+      '<tr>' + cols.map(c => `<td>${esc(r[c])}</td>`).join('') +
+      `<td style="white-space:nowrap"><button class="link" onclick="openForm(${r.id})">Edit</button>` +
+      `<button class="link danger" onclick="removeRow(${r.id})">Delete</button></td></tr>`).join('')
+      : `<tr><td class="empty" colspan="${cols.length + 1}">No ${key} yet</td></tr>`;
+  } catch (err) { $('tbody').innerHTML = ''; setMsg(err.message, true); }
+}
+
+function openForm(id) {
+  editingId = id ?? null;
+  const r = id ? rows.find(x => x.id === id) : {};
+  const all = [...COMMON, ['password','Password', !id, 'password'], ...RESOURCES[current].fields];
+  $('dlgTitle').textContent = (id ? 'Edit ' : 'Add ') + RESOURCES[current].label.slice(0, -1);
+  $('fields').innerHTML = all.map(([k, label, req, type]) =>
+    `<label for="f_${k}">${label}${req ? ' *' : ''}</label>` +
+    `<input id="f_${k}" name="${k}" type="${type || 'text'}" ${req ? 'required' : ''} value="${k === 'password' ? '' : esc(r[k])}">` +
+    (k === 'password' && id ? '<div class="hint">Leave blank to keep the current password</div>' : '')).join('');
+  $('dlgMsg').textContent = '';
+  $('dlg').showModal();
+}
+
+async function save(e) {
+  e.preventDefault();
+  const body = {};
+  new FormData(e.target).forEach((v, k) => { body[k] = v === '' ? null : v; });
+  if (body.batch != null) body.batch = Number(body.batch);
+  try {
+    if (editingId) await api('PUT', `/api/${current}/${editingId}`, body);
+    else await api('POST', `/api/${current}`, body);
+    $('dlg').close();
+    await show(current);
+    setMsg(editingId ? 'Updated successfully' : 'Created successfully');
+  } catch (err) { $('dlgMsg').textContent = err.message; }
+}
+
+async function removeRow(id) {
+  if (!confirm('Delete this record?')) return;
+  try { await api('DELETE', `/api/${current}/${id}`); await show(current); setMsg('Deleted'); }
+  catch (err) { setMsg(err.message, true); }
+}
+
+function setMsg(text, isErr) { const m = $('msg'); m.textContent = text; m.className = 'msg ' + (isErr ? 'err' : 'ok'); }
+
+boot();
+</script>
+</body>
+</html>
